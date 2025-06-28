@@ -1,0 +1,495 @@
+---
+title: "Análisis predictivo del comportamiento socioeconómico de una criptomoneda en la comunidad estudiantil de la UNRC"
+output: html_notebook
+---
+*Importamos las librerías que utilizaremos para el proyecto: *
+```{r}
+#install.packages("mongolite")
+#install.packages("dplyr")
+```
+```{r}
+# mongolite hace posible la conexión con bases de datos MongoDB. 
+library(mongolite)
+# dplyr permite la manipulación y transformación de data frames.
+library(dplyr)
+```
+*Declaramos la variable con nuestra base de datos de MongoDB: *
+```{r}
+url <- "mongodb+srv://gallegoscarlos905:DM2z1uuDSnTTj4fJ@cluster0.68lnfay.mongodb.net/rosareum"
+```
+*Empezamos con la conexión y bajada de datos a dataframes: *
+```{r}
+adopcion <- mongo(collection = "adopcion", db = "rosareum", url = url)
+adopcion<- adopcion$find()
+adopcion
+```
+```{r}
+becas<- mongo(collection = "becas", db = "rosareum", url = url)
+becas<- becas$find()
+becas
+```
+```{r}
+confianza <- mongo(collection = "confianza", db = "rosareum", url = url)
+confianza<- confianza$find()
+confianza
+```
+```{r}
+inflacion <- mongo(collection = "inflacion_acumulada", db = "rosareum", url = url)
+inflacion<- inflacion$find()
+inflacion
+```
+```{r}
+demanda <- mongo(collection = "demanda", db = "rosareum", url = url)
+demanda<- demanda$find()
+demanda
+```
+```{r}
+oferta <- mongo(collection = "oferta", db = "rosareum", url = url)
+oferta <- oferta$find()
+oferta
+```
+```{r}
+eventos<- mongo(collection = "eventos", db = "rosareum", url = url)
+eventos <- eventos$find()
+eventos
+```
+```{r}
+precio<- mongo(collection = "precio", db = "rosareum", url = url)
+precio<- precio$find()
+precio
+```
+```{r}
+participacion<- mongo(collection = "participacion", db = "rosareum", url = url)
+participacion<- participacion$find()
+participacion
+```
+```{r}
+periodo <- mongo(collection = "periodo", db = "rosareum", url = url)
+periodo<- periodo$find()
+periodo
+```
+```{r}
+sentimiento <- mongo(collection = "sentimiento", db = "rosareum", url = url)
+sentimiento <- sentimiento$find()
+sentimiento
+```
+```{r}
+transacciones<- mongo(collection = "transacciones", db = "rosareum", url = url)
+transacciones<- transacciones$find()
+transacciones
+```
+```{r}
+ratio<- mongo(collection = "ratio", db = "rosareum", url = url)
+ratio<- ratio$find()
+ratio
+```
+*Vamos a hacer un join progresivo con inner_join para unir por fecha: *
+```{r}
+# Verificamos que todas las columanas tenga fecha para poder hacer el join.
+colnames(adopcion)
+colnames(becas)
+colnames(confianza)
+colnames(inflacion)
+colnames(demanda)
+colnames(oferta)
+colnames(eventos)
+colnames(precio)
+colnames(participacion)
+colnames(periodo)
+colnames(sentimiento)
+colnames(transacciones)
+colnames(ratio)
+```
+```{r}
+# Creamos el Dataframe con todas las variables: 
+data <- adopcion %>%
+  inner_join(becas, by = "Fecha") %>%
+  inner_join(confianza, by = "Fecha") %>%
+  inner_join(inflacion, by = "Fecha") %>%
+  inner_join(demanda, by = "Fecha") %>%
+  inner_join(oferta, by = "Fecha") %>%
+  inner_join(eventos, by = "Fecha") %>%
+  inner_join(precio, by = "Fecha") %>%
+  inner_join(participacion, by = "Fecha") %>%
+  inner_join(periodo, by = "Fecha") %>%
+  inner_join(sentimiento, by = "Fecha") %>%
+  inner_join(transacciones, by = "Fecha") %>%
+  inner_join(ratio, by = "Fecha")
+```
+```{r}
+precio
+```
+
+*Obtenemos el rendimiento logarítmico del precio: *
+```{r}
+rendimiento<- diff(log(data$Precio))
+```
+```{r}
+data <- data[-1, ]# Eliminar la primera fila de data y unir el rendimiento.
+data <- data %>% mutate(Rendimiento = rendimiento)
+```
+*Mostrar  'data' para corroborar: *
+
+*Creamos la matriz de varianza - covarianza.*
+```{r}
+cov_matrix <- cov(data[,2:14])
+```
+
+```{r}
+View(cov_matrix)
+```
+
+```{r}
+# Seleccionamos solo las columnas numéricas.
+data_numeric <- data %>% select(where(is.numeric))
+```
+```{r}
+data_numeric
+```
+
+
+```{r}
+# Normalizamos (media 0, desviación estándar 1).
+data_norm <- scale(data_numeric)
+data_norm <- as.data.frame(data_norm)
+# Calcular matriz de covarianza con los datos normalizados.
+matriz_covarianza <- cov(data_norm)
+```
+
+```{r}
+View(matriz_covarianza)
+```
+*Hay muchas observaciones para el resultado de nuestra matriz*
+
+*Resultados positivos: *
+
+1. *Eventos_especiales y Sentimiento (0.932)*: Los eventos especiales mejoral el sentimiento estudiantil, lo que podria ser clave para adopcion.
+
+2. *Sentimiento y transacciones (0.903)*: Cuando el sentimiento mejora, hay ams transacciones, el animo colectivo impulsa la moneda.
+
+3. *Eventos_especiales y Transacciones(0.867)*: A un aumento de eventos, aumentan las transacciones.
+
+4. *Confianza y Sentimiento(0.657)*: La confianza esta bien ligada con el sentimiento, lo que nos indica que campañas para mejroar la confianza serian cruciales para la adopción de la moneda.
+
+5. *Participación_estudiantil y Adopción(0.640): *Un estudiante participativo adopta mas la moneda en su dia a dia, mejorar aun mas ese valor y fomentar la participación es una inversion social.
+
+*Relaciones fuertemente negativas: * 
+
+1. *Inflación_Acumulada y Oferta (-0.600)*: A mayor inflación acumulada, menor es la oferta de la moneda. Esto puede deberse a que los emisores limitan la circulación para evitar devaluaciones, lo cual afecta la disponibilidad en el ecosistema.
+
+2. *Precio y Oferta (-0.629)*:  Un aumento en el precio está asociado con una caída en la oferta, lo que sugiere un posible fenómeno de escasez o especulación. Puede ser señal de concentración de la moneda en pocas manos.
+
+3. *Ratio_Liquidez e Inflación_Acumulada (-0.661)*: Cuando la inflación se acumula, la liquidez cae fuertemente. Esto indica que los estudiantes se sienten menos seguros para intercambiar la moneda cuando el valor percibido disminuye.
+
+4. *Ratio_Liquidez y Precio (-0.382)*: Un precio alto de la moneda puede generar menos liquidez. Quizá porque los estudiantes prefieren retenerla en vez de usarla, esperando que siga subiendo su valor.
+
+5. *Demanda y Ratio_Liquidez (-0.339)*: A mayor demanda, la liquidez baja. Esto puede parecer contraintuitivo, pero podría explicarse si hay acumulación o retención de moneda en lugar de circulación.
+
+*Ahora: *
+
+*Utilizamos un modelo de regresión lineal para determinar el precio en función de las variables importantes que encontramos en la matriz var-cov: *
+```{r}
+# Seleccionar variables relevantes (menos 'Fecha' y 'Precio').
+variables <- c("Inflacion_Acumulada", "Adopcion", "Becas_Otorgadas", 
+               "Confianza", "Demanda", "Oferta", "Participacion_Estudiantil", 
+               "Eventos_Especiales", "Periodo_Academico", "Sentimiento", 
+               "Transacciones", "Ratio_Liquidez")
+
+# Crear el Dataframe solo con las columnas seleccionadas + Precio.
+df_modelo <- data[, c("Precio", variables)]
+
+# Eliminar NA si existen.
+df_modelo <- na.omit(df_modelo)
+```
+```{r}
+df_modelo
+```
+
+
+
+*Utilizamos la regresión lineal: *
+```{r}
+# La función 'lm' crea un modelo de regresión, donde:
+# Precio sera nuestra variable dependiente.
+modelo_multiple <- lm(Precio ~ ., data = df_modelo)
+
+# Summary imprimara nuestra significancia estadística (p).
+summary(modelo_multiple)
+```
+*Generamos las predicciones del precio usando el mismo Dataset con el que acabamos de entrenar el modelo: *
+```{r}
+precio_estimado <- predict(modelo_multiple, newdata = df_modelo)
+```
+*Visualización del precio real vs estimado: *
+```{r}
+plot(df_modelo$Precio, type = "l", col = "red", lwd = 2,
+     ylab = "Precio", xlab = "Observaciones", main = "Precio Estimado vs Real")
+lines(precio_estimado, col = "blue", lwd = 2)
+legend("topleft", legend = c("Real", "Estimado"), col = c("red", "blue"), lty = 1)
+```
+*Como podemos observar en la gráfica resultante, el modelo de predicción lineal no es tan bueno para predecir el precio, esto de debe a que las variables que tomamos en cuenta son mas no lineales que lineales, lo que nos resulta en una predicción del precio de la criptomoneda mas suavizada*
+
+*Ahora vamos a utilizar un modelo de machine learning supervisado para tratar de mejorar la predicción del precio con respecto a las otras variables: *
+```{r}
+# Instalamos e importamos 'RandomForest', el modelo que utilizaremos para determinar el precio estimado.
+#install.packages("randomForest")
+library(randomForest)
+
+# Fijamos la reproducibidad para que el proceso aleatorio sea reproducible y así obtener siempre el mismo resultado
+set.seed(123)
+
+# Declaramos nuestro modelo a entrenar.
+modelo_rf <- randomForest(
+  Precio ~ .,           # La variable dependiente a utilizar.
+  data = df_modelo,     # El Dataset previente hecho en la regresión lineal.
+  ntree = 500,          # Número de árboles.
+  mtry = 4,             # Número de variables aleatorias por división.
+  importance = TRUE     # Para analizar importancia de variables.
+)
+```
+*Empezamos con la predicción del modelo con nuestras variables ya definidas: *
+```{r}
+# Utilizamos el modelo entrenado para predecir los precios usando los mismos datos de entrenamiento.
+pred_rf <- predict(modelo_rf, df_modelo)
+
+# Visualización de resultados.
+plot(df_modelo$Precio, type = "l", col = "red", lwd = 2,
+     main = "Random Forest - Precio Estimado vs Real",
+     ylab = "Precio", xlab = "Observaciones")
+lines(pred_rf, col = "blue", lwd = 2)
+legend("topleft", legend = c("Real", "Estimado"), col = c("red", "blue"), lty = 1)
+```
+*La gráfica muestra una predicción mas real de como es el precio estimado en función del precio real, mejorando mucho los picos de alta y baja*
+
+*Evaluamos el promedio de error absoluto y la raíz cuadrada del error cuadrático medio para ver que tan bien esta funcionando nuestro modelo: *
+```{r}
+promedio_error <- mean(abs(df_modelo$Precio - pred_rf))
+raiz_del_error <- sqrt(mean((df_modelo$Precio - pred_rf)^2))
+
+# Cuanto mas bajos sean estos valores, mejor estará funcionando nuestro RandomForest, MAE nos dará una idea del error promedio mientras que RMSE    penaliza mas lo errores grandes.
+cat("MAE:", round(promedio_error, 3), "\n")
+cat("RMSE:", round(raiz_del_error, 3), "\n")
+
+# Importancia de variables.
+importancia <- importance(modelo_rf) # importancia extrae la importancia de cada variable en la predicción del precio.
+print(importancia)
+
+# Generamos un gráfico con la importancia.
+varImpPlot(modelo_rf, main = "Importancia de Variables")
+```
+*El modelo sugiere que las variables más influyentes para predecir el precio de la criptomoneda estudiantil son:*
+*Inflación_Acumulada.*
+*Oferta.*
+*Ratio_Liquidez.*
+*Demanda.*
+*Periodo_Académico.*
+
+*Haremos un análisis de componentes principales 'PCA' sobre las variables sociales, para determinar un indice de populadidad social para así determinar su evolución en el tiempo: *
+```{r}
+# Verificamos si los paquetes están instalados, si no, se instalan automáticamente.
+#paquetes_necesarios <- c("tidyverse", "factoextra")
+#instalar_faltantes <- paquetes_necesarios[!(paquetes_necesarios %in% installed.packages()[,"Package"])]
+#if(length(instalar_faltantes)) install.packages(instalar_faltantes)
+
+# Cargamos las librerías.
+library(tidyverse)
+library(factoextra)
+
+# Variables sociales definidas.
+vars_sociales <- c("Participacion_Estudiantil", "Confianza", "Becas_Otorgadas", 
+                   "Adopcion", "Eventos_Especiales", "Sentimiento", "Periodo_Academico")
+
+# Verificamos que las variables existan y sean numéricas.
+vars_disponibles <- vars_sociales[vars_sociales %in% names(data_norm)]
+data_pca <- data_norm %>% 
+  select(all_of(vars_disponibles)) %>%
+  mutate(across(everything(), as.numeric))
+
+# Análisis de componentes principales (PCA).
+pca_result <- prcomp(data_pca, center = TRUE, scale. = TRUE)
+
+# Visualización de la varianza explicada.
+fviz_eig(pca_result)
+
+# Visualización de los individuos (observaciones).
+fviz_pca_ind(pca_result, 
+             geom.ind = "point", 
+             col.ind = "cos2", 
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+
+# Visualización de las variables (contribución a componentes).
+fviz_pca_var(pca_result, 
+             col.var = "contrib", 
+             gradient.cols = c("blue", "yellow", "red"))
+
+# Extraemos las coordenadas principales (scores).
+componentes <- as.data.frame(pca_result$x)
+```
+```{r}
+plot(data$Precio, type='l')
+```
+
+```{r}
+# Crear índice de popularidad social a partir de los primeros tres componentes principales.
+indice_popularidad <- rowSums(componentes[, c("PC1", "PC2", "PC3")])
+
+# Agregar el índice a los datos normalizados.
+data_norm$Indice_Popularidad <- indice_popularidad
+
+# Ver media del índice ya estandarizado (debería ser cercana a 0 si está normalizado).
+mean(data_norm$Indice_Popularidad)
+```
+*Ahora haremos una regresión lineal del indice de popularidad utilizando ecuaciones diferenciales para determinar la popularidad con respecto al tiempo: *
+```{r}
+library(deSolve)
+
+data$Fecha <- as.Date(data$Fecha)
+data_norm$Tiempo <- as.numeric(data$Fecha - min(data$Fecha))
+
+# Filtra datos para evitar valores negativos o cero (no se puede hacer log de ellos).
+data_filtrada <- data_norm %>% filter(Indice_Popularidad > 0)
+
+# Ajusta una regresión lineal: log(I) = r * t + c.
+modelo_log <- lm(log(Indice_Popularidad) ~ Tiempo, data = data_filtrada)
+
+# Extrae el coeficiente de la pendiente (r).
+r <- coef(modelo_log)["Tiempo"]
+```
+*Ahora definimos el modelo de la ecuación diferencial: *
+```{r}
+# Definimos la ecuación diferencial: dI/dt = r * I (modelo de crecimiento exponencial).
+modelo_ecd <- function(t, I, parametros) {
+  with(as.list(parametros), {
+    dI <- r * I
+    return(list(dI))
+  })
+}
+```
+*Simulación numérica de los datos con la función 'ode()': *
+```{r}
+# Simular con ode, usando valor inicial real del índice.
+I0 <- data_norm$Indice_Popularidad[1] # Valor inicial del indice.
+
+tiempos <- seq(min(data_norm$Tiempo), max(data_norm$Tiempo) + 1000, by = 1) # Simulamos una predicción a largo plazo (3 años).
+parametros <- c(r = r)
+```
+*Resultados de la simulación: *
+```{r}
+resultado <- ode(y = I0, times = tiempos, func = modelo_ecd, parms = parametros) # Convertimos el resultado de 'ode()' en un Dataframe para graficarlo y renombramos las columnas.
+
+resultado_df <- as.data.frame(resultado)
+colnames(resultado_df) <- c("Tiempo", "IndiceSimulado")
+plot(data_norm$Indice_Popularidad, type = "l", col = "blue", main = "Índice de Popularidad Social", ylab = "Popularidad", xlab = "Tiempo")
+
+# Graficar datos reales y simulados con la librería 'ggplot2'.
+library(ggplot2)
+ggplot() +
+  geom_point(data = data_norm, aes(x = Tiempo, y = Indice_Popularidad), color = "red") +
+  geom_line(data = resultado_df, aes(x = Tiempo, y = IndiceSimulado), color = "blue", size = 2) +
+  labs(title = "Modelado de la Evolucion del IPS con respecto al tiempo",
+       x = "Días desde fecha inicial", y = "Índice de Popularidad Social") +
+  theme_minimal() +  scale_y_continuous(limits = c(0, NA))
+```
+*Conclusiones de este modelo*
+*El modelo de ecuación diferencial exponencial permite proyectar cómo evoluciona el índice de popularidad social en el tiempo con base en los datos observados.*
+*Tras ajustar el modelo a datos positivos, se observa que la predicción sigue una curva creciente suave (exponencial), lo cual refleja un posible aumento acumulativo de popularidad con el paso del tiempo.*
+*El parámetro de crecimiento (r) obtenido mediante regresión lineal del logaritmo del índice indica qué tan rápido crece la popularidad.*
+
+
+*Ahora construiremos y entrenaremos una red neuronal usando el paquete 'keras' con el objetivo de predecir el indice de popularidad social.*
+*Instalamos y cargamos los paquetes: *
+```{r}
+# Instalación de keras.
+#install.packages("keras")
+# Instalamos TensorFlow y las dependencias de keras.
+#keras::install_keras()
+```
+
+```{r}
+#Llamamos a keras
+library(keras)
+```
+*Seleccionamos los datos y los extraemos: *
+```{r}
+# Variables sociales y PCA.
+vars_sociales <- c("Participacion_Estudiantil", "Confianza", "Becas_Otorgadas", 
+                   "Adopcion", "Eventos_Especiales", "Sentimiento", "Periodo_Academico")
+
+# Extraer solo esas columnas.
+data_social <- data_norm[, vars_sociales]
+
+# Como queremos estimar el indice de popularidad, lo creamos con ayuda del PCA.
+# Aquí usaremos el primer componente principal como variable objetivo (índice).
+pca_social <- prcomp(data_social, center = TRUE, scale. = TRUE)
+indice_popularidad <- pca_social$x[, 1]
+
+# Creamos Dataset.
+# X: Datos de entrada (matriz de variables sociales).
+# y: Variable de salida a predecir (índice de popularidad creado por PCA).
+X <- as.matrix(data_social)
+y <- as.numeric(indice_popularidad)
+```
+*Definimos y compilamos el modelo de red neuronal.*
+```{r}
+# Definir modelo secuencial.
+modelo_nn <- keras_model_sequential() %>%
+  layer_dense(units = 16, activation = "relu", input_shape = ncol(X)) %>% #Iniciamos con 16 neuronas y una activación de tipo ReLU.
+  layer_dropout(rate = 0.2) %>% 
+  layer_dense(units = 8, activation = "relu") %>% # En la segunda capa ahora tendremos solo 8 neuronas.
+  layer_dense(units = 1)  # Salida: Indice de popularidad.
+
+# Compilar modelo.
+modelo_nn %>% compile(
+  loss = "mean_squared_error", # Función de perdida del error promedio cuadrado.
+  optimizer = optimizer_adam(),
+  metrics = list("mean_absolute_error")
+)
+```
+*Entrenamiento del modelo: *
+```{r}
+# Entrenamiento.
+historia <- modelo_nn %>% fit(
+  X, y,
+  epochs = 100, # Definimos 100 épocas.
+  batch_size = 8,
+  validation_split = 0.2, # Reservamos el 20% de los datos para la validación.
+  verbose = 1
+)
+```
+*Resultados del entrenamiento*
+```{r}
+# Visualizar pérdida durante el entrenamiento
+plot(historia)
+```
+*La gráfica muestra como es que esta disminuyendo el error de entrenamiento y el de validación con respecto a nuestras épocas, del descenso inicial es relativamente normal, indicando el que modelo esta aprendiendo rápido desde el principio*
+*Después de unas 20 a 30 épocas el error se estabiliza cerca del cero, lo cual nos ayuda a entender que no hay sobreajuste de nuestro modelo ya que las curvas de validación y entrenamiento se mantienen juntas El modelo entrenó correctamente. No hay señales evidentes de overfitting ni underfitting.*
+```{r}
+# Predicción del índice
+indice_predicho <- modelo_nn %>% predict(X) # Utilizamos el modelo entrenado para predecir los valores de y en el indice de popularidad usando los mismos datos de entrada
+```
+*Graficamos el indice real con el la predicción: *
+```{r}
+plot(y, type = "l", col = "red", lwd = 2, ylab = "Índice", xlab = "Observaciones", main = "Índice Popularidad Real vs Estimado")
+lines(indice_predicho, col = "blue", lwd =1)
+legend("topleft", legend = c("Real", "Estimado"), col = c("red", "blue"))
+summary(modelo_nn)
+```
+*La gráfica compara el índice de popularidad real (calculado con PCA) vs el estimado por la red neuronal, ambas líneas son similares lo que significa que el modelo tiene buena capacidad predictiva, esto nos indica que las variables sociales influyen de forma significativa en el índice de popularidad, por lo que la red neuronal puede ser útil para predecir el impacto social de la criptomoneda en el contexto universitario.*
+
+
+```{r}
+indice_popularidad[2]
+```
+
+```{r}
+png("grafica_popularidad.png", width = 1200, height = 600)
+plot(y, type = "l", col = "darkred", lwd = 4,
+     ylab = "Índice", xlab = "Observaciones",
+     main = "Índice Popularidad Real vs Estimado")
+lines(indice_predicho, col = "blue", lwd = 1)
+legend("topleft", legend = c("Real", "Estimado"),
+       col = c("darkred", "blue"), lwd = c(1, 1))
+dev.off()
+
+```
+
